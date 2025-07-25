@@ -27,6 +27,9 @@
             <li class="menu-item" data-tool="provider-analysis">
                 <a><i class="fa-solid fa-user-tag"></i><span>Análisis por Proveedor</span></a>
             </li>
+            <li class="menu-item" data-tool="discrepancy-analysis">
+                <a><i class="fa-solid fa-filter-circle-dollar"></i><span>Análisis de Desvíos</span></a>
+            </li>
         </ul>
         <div class="sidebar-footer">
             <div class="theme-switcher">
@@ -133,7 +136,7 @@
                      <div id="provider-analysis-placeholder" class="card placeholder-card">
                          <div class="placeholder">
                             <i class="fa-solid fa-arrow-left"></i>
-                            <p>Primero, realiza una conciliación en la herramienta "Conciliador General" para poder usar esta función.</p>
+                            <p>Primero, realiza o carga una conciliación para poder usar esta función.</p>
                         </div>
                      </div>
                      <div id="provider-analysis-content" class="card hidden">
@@ -185,6 +188,34 @@
                      </div>
                  </div>
             </div>
+
+            <div id="tool-discrepancy-analysis" class="tool-content hidden">
+                 <div class="panel-full-width">
+                     <div id="discrepancy-analysis-placeholder" class="card placeholder-card">
+                         <div class="placeholder">
+                            <i class="fa-solid fa-arrow-left"></i>
+                            <p>Primero, realiza o carga una conciliación para poder usar esta función.</p>
+                        </div>
+                     </div>
+                     <div id="discrepancy-analysis-content" class="card hidden">
+                        <h3><i class="fa-solid fa-filter-circle-dollar"></i> Análisis de Desvíos por Proveedor</h3>
+                        <p class="subtitle">Encuentra los proveedores con las diferencias más significativas para enfocar tu análisis.</p>
+                        <div class="filter-controls" style="display: flex; gap: 1rem; align-items: center; padding: 1rem; background: var(--input-bg-color); border-radius: 8px;">
+                            <label for="discrepancy-threshold">Mostrar proveedores con diferencias mayores a $:</label>
+                            <input type="number" id="discrepancy-threshold" class="select-mapping" value="100000" style="max-width: 200px;">
+                            <button id="apply-discrepancy-filter-btn" class="btn-primary"><i class="fa-solid fa-filter"></i> Aplicar Filtro</button>
+                        </div>
+                        <div id="discrepancy-summary" class="hidden">
+                            <div class="summary-cards" style="margin-top: 2rem;">
+                               <div class="summary-card"><h4>Proveedores Encontrados</h4><p id="summary-providers-found">0</p></div>
+                               <div class="summary-card danger"><h4>Suma de Desvíos</h4><p id="summary-discrepancy-total">$0.00</p></div>
+                            </div>
+                            <div class="table-wrapper" style="margin-top: 2rem;"><table id="table-discrepancies"></table></div>
+                        </div>
+                     </div>
+                 </div>
+            </div>
+            
         </main>
     </div>
 </div>
