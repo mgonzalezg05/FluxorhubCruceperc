@@ -1,3 +1,8 @@
+// Conexión a Supabase con tus claves
+const SUPABASE_URL = 'https://eflaynhqmzxchqhkcnzp.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbGF5bmhxbXp4Y2hxaGtjbnpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM0MDQxODQsImV4cCI6MjA2ODk4MDE4NH0.7t0LNLiv5zNB36SIt7sFhv3GftQ2XqD6L_eKK2rr3NI';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- ESTADO GLOBAL DE LA APLICACIÓN ---
     const appState = {
@@ -173,7 +178,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const th = document.createElement('th');
             th.className = 'checkbox-cell';
             
-            // --- NUEVO: Crear y configurar el checkbox "Seleccionar todo" ---
             const selectAllCheckbox = document.createElement('input');
             selectAllCheckbox.type = 'checkbox';
             selectAllCheckbox.title = 'Seleccionar todo';
@@ -183,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bodyCheckboxes.forEach(cb => {
                     cb.checked = isChecked;
                 });
-                handleManualSelection(); // Actualizar el estado y el panel
+                handleManualSelection(); 
             });
             th.appendChild(selectAllCheckbox);
             headerRow.appendChild(th);
@@ -472,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
         provUI.tableReconciled.querySelectorAll('tbody input[type="checkbox"]:checked').forEach(cb => appState.manualSelection.reconciled.add(parseInt(cb.dataset.index)));
         provUI.tableUnmatchedContabilidad.querySelectorAll('tbody input[type="checkbox"]:checked').forEach(cb => appState.manualSelection.unmatched.add(parseInt(cb.dataset.index)));
         
-        updateSelectAllCheckboxes(); // Actualizar estado del checkbox de cabecera
+        updateSelectAllCheckboxes(); 
         updateReconciliationPanel();
     }
 
