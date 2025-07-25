@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let messageTimeout;
     const appState = {
         currentReconciliationId: null, // Guarda el ID de la sesión cargada
+        providerDiscrepancies: [], // Guarda los desvíos calculados
         fileArca: null, fileContabilidad: null,
         dataArca: null, dataContabilidad: null,
         allArcaRecords: [], allContabilidadRecords: [],
@@ -84,6 +85,16 @@ document.addEventListener('DOMContentLoaded', () => {
             summaryArca: document.getElementById('provider-summary-arca'),
             summaryContabilidad: document.getElementById('provider-summary-contabilidad'),
             summaryDiferencia: document.getElementById('provider-summary-diferencia'),
+        },
+        discrepancyAnalysis: {
+            placeholder: document.getElementById('discrepancy-analysis-placeholder'),
+            content: document.getElementById('discrepancy-analysis-content'),
+            thresholdInput: document.getElementById('discrepancy-threshold'),
+            applyFilterBtn: document.getElementById('apply-discrepancy-filter-btn'),
+            summary: document.getElementById('discrepancy-summary'),
+            providersFound: document.getElementById('summary-providers-found'),
+            discrepancyTotal: document.getElementById('summary-discrepancy-total'),
+            table: document.getElementById('table-discrepancies'),
         }
     };
     
@@ -267,6 +278,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hasResults) {
             populateProviderSelector();
         }
+        // Actualizar visibilidad de la nueva herramienta
+        ui.discrepancyAnalysis.placeholder.classList.toggle('hidden', hasResults);
+        ui.discrepancyAnalysis.content.classList.toggle('hidden', !hasResults);
+        if (!hasResults) {
+            ui.discrepancyAnalysis.summary.classList.add('hidden');
+        }
     }
 
     // --- LÓGICA DEL CONCILIADOR ---
@@ -386,6 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const allContabilidadCuits = appState.allContabilidadRecords.map(r => normalizeRecord(r, cuitContCol, null).cuit);
             appState.providerCuits = [...new Set([...allArcaCuits, ...allContabilidadCuits])].filter(c => c).sort();
             
+            await calculateAllProviderDiscrepancies();
             displayGeneralResults();
             updateToolAvailability();
             showMessage('Conciliación completada.');
@@ -400,15 +418,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayGeneralResults() {
         const { reconciler: recUI } = ui;
         const arcaMontoCol = recUI.selectMontoArca.value;
-        const arcaData = appState.allArcaRecords; // <-- CORRECCIÓN: Usar los datos en estado
+        const arcaData = appState.allArcaRecords;
         const reconciled = arcaData.filter(r => r.Estado === 'Conciliada');
         const pending = arcaData.filter(r => r.Estado === 'Pendiente');
-        const totalArca = arcaData.reduce((sum, r) => sum + (normalizeRecord(r, null, arcaMontoCol).monto || 0), 0); // <-- CORRECCIÓN
+        const totalArca = arcaData.reduce((sum, r) => sum + (normalizeRecord(r, null, arcaMontoCol).monto || 0), 0);
         const totalReconciled = reconciled.reduce((sum, r) => sum + (normalizeRecord(r, null, arcaMontoCol).monto || 0), 0);
         const totalPending = totalArca - totalReconciled;
         const formatCurrency = (num) => num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         recUI.summaryArcaAmount.textContent = `$${formatCurrency(totalArca)}`;
-        recUI.summaryArcaCount.textContent = `${arcaData.length} registros`; // <-- CORRECCIÓN
+        recUI.summaryArcaCount.textContent = `${arcaData.length} registros`;
         recUI.summaryReconciledAmount.textContent = `$${formatCurrency(totalReconciled)}`;
         recUI.summaryReconciledCount.textContent = `${reconciled.length} registros`;
         recUI.summaryPendingAmount.textContent = `$${formatCurrency(totalPending)}`;
@@ -567,7 +585,6 @@ document.addEventListener('DOMContentLoaded', () => {
         displayProviderDetails();
     }
     
-    // --- LÓGICA DE DESCARGA ---
     function downloadReport(isGeneral = true) {
         if (appState.allArcaRecords.length === 0) {
             showMessage('No hay resultados para descargar.', true);
@@ -729,11 +746,11 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.reconciler.reconciliationNameInput.value = concData.nombre;
             ui.reconciler.reconciliationStatusSelect.value = concData.status;
             
-            // --- CORRECCIÓN: Calcular y guardar la lista de proveedores ---
             const allArcaCuits = appState.allArcaRecords.map(r => normalizeRecord(r, concData.cuit_arca_col, null).cuit);
             const allContabilidadCuits = appState.allContabilidadRecords.map(r => normalizeRecord(r, concData.cuit_cont_col, null).cuit);
             appState.providerCuits = [...new Set([...allArcaCuits, ...allContabilidadCuits])].filter(c => c).sort();
 
+            await calculateAllProviderDiscrepancies();
             displayGeneralResults();
             updateToolAvailability();
             showMessage(`Conciliación "${concData.nombre}" cargada.`, false);
@@ -781,92 +798,129 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // --- INICIALIZACIÓN DE LA APP ---
-    function initialize() {
-        const currentTheme = localStorage.getItem("theme");
-        if (currentTheme) { document.body.classList.add(currentTheme); if (currentTheme === "dark-mode") ui.themeToggle.checked = true; }
-        ui.themeToggle.addEventListener("change", function() {
-            document.body.classList.toggle("dark-mode", this.checked);
-            localStorage.setItem("theme", this.checked ? "dark-mode" : "light-mode");
-        });
-        
-        ['dragover', 'drop'].forEach(eventName => {
-            window.addEventListener(eventName, e => e.preventDefault());
+    // --- NUEVAS FUNCIONES PARA ANÁLISIS DE DESVÍOS ---
+    function findRazonSocialColumn(record) {
+        const possibleKeys = ['Razón Social', 'Denominación', 'Nombre', 'DENOMINACION', 'RAZON SOCIAL'];
+        const key = possibleKeys.find(k => record && record[k]);
+        return record && key ? record[key] : 'N/A';
+    }
+
+    async function calculateAllProviderDiscrepancies() {
+        const { reconciler: recUI } = ui;
+        appState.providerDiscrepancies = [];
+        const cuitMap = new Map();
+
+        appState.allArcaRecords.forEach(r => {
+            const cuit = normalizeRecord(r, recUI.selectCuitArca.value, null).cuit;
+            if (!cuit) return;
+            if (!cuitMap.has(cuit)) {
+                cuitMap.set(cuit, {
+                    razonSocial: findRazonSocialColumn(r),
+                    totalArca: 0,
+                    totalContabilidad: 0
+                });
+            }
+            cuitMap.get(cuit).totalArca += normalizeRecord(r, recUI.selectCuitArca.value, recUI.selectMontoArca.value).monto;
         });
 
-        setupNavigation();
-        
-        function setupDropZone(dropZone, fileInput, onFileSelect) {
-            dropZone.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', (e) => onFileSelect(e.target.files[0]));
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropZone.addEventListener(eventName, e => {
-                    e.preventDefault();
-                    e.stopPropagation();
+        appState.allContabilidadRecords.forEach(r => {
+            const cuit = normalizeRecord(r, recUI.selectCuitContabilidad.value, null).cuit;
+            if (!cuit) return;
+            if (!cuitMap.has(cuit)) {
+                cuitMap.set(cuit, {
+                    razonSocial: findRazonSocialColumn(r),
+                    totalArca: 0,
+                    totalContabilidad: 0
                 });
-            });
-            dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
-            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-            dropZone.addEventListener('drop', (e) => {
-                dropZone.classList.remove('dragover');
-                if (e.dataTransfer.files.length) onFileSelect(e.dataTransfer.files[0]);
+            }
+            cuitMap.get(cuit).totalContabilidad += normalizeRecord(r, recUI.selectCuitContabilidad.value, recUI.selectMontoContabilidad.value).monto;
+        });
+
+        for (const [cuit, totals] of cuitMap.entries()) {
+            appState.providerDiscrepancies.push({
+                CUIT: cuit,
+                'Razón Social': totals.razonSocial,
+                'Total ARCA': totals.totalArca,
+                'Total Contabilidad': totals.totalContabilidad,
+                Diferencia: totals.totalArca - totals.totalContabilidad,
             });
         }
-        
-        setupDropZone(ui.reconciler.dropZoneArca, ui.reconciler.fileInputArca, (file) => handleFileSelect(file, 'Arca'));
-        setupDropZone(ui.reconciler.dropZoneContabilidad, ui.reconciler.fileInputContabilidad, (file) => handleFileSelect(file, 'Contabilidad'));
-        
-        ui.reconciler.processBtn.addEventListener('click', processReconciliation);
-        ui.reconciler.downloadBtn.addEventListener('click', () => downloadReport(true));
-        
-        ui.providerAnalysis.providerSelect.addEventListener('change', () => {
-            displayProviderDetails();
-            appState.manualSelection = { pending: new Set(), reconciled: new Set(), unmatched: new Set() };
-            updateReconciliationPanel();
-        });
-        ui.providerAnalysis.downloadBtn.addEventListener('click', () => downloadReport(false));
-        
-        document.querySelectorAll('.config-btn').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const dropdown = button.nextElementSibling;
-                if (dropdown) {
-                    const isHidden = dropdown.classList.contains('hidden');
-                    document.querySelectorAll('.column-config-dropdown').forEach(d => d.classList.add('hidden'));
-                    if (isHidden) dropdown.classList.remove('hidden');
-                }
-            });
-        });
+    }
 
-        window.addEventListener('click', (e) => {
-            if (!e.target.closest('.table-config-container')) {
-                document.querySelectorAll('.column-config-dropdown').forEach(dropdown => {
-                    dropdown.classList.add('hidden');
-                });
-            }
+    function renderDiscrepancyTable(data) {
+        const tableElement = ui.discrepancyAnalysis.table;
+        tableElement.innerHTML = '';
+        if (!data || data.length === 0) {
+            const tbody = document.createElement('tbody');
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.textContent = 'No se encontraron proveedores que cumplan con el criterio.';
+            td.colSpan = "100%";
+            td.style.textAlign = 'center';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            tableElement.appendChild(tbody);
+            return;
+        }
+
+        const headers = [...Object.keys(data[0]), 'Acción'];
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headers.forEach(headerText => {
+            const th = document.createElement('th');
+            th.textContent = headerText;
+            headerRow.appendChild(th);
         });
+        thead.appendChild(headerRow);
 
-        ui.reconciliationPanel.reconcileBtn.addEventListener('click', executeManualReconciliation);
-        ui.reconciliationPanel.deReconcileBtn.addEventListener('click', executeDereconciliation);
-        
-        document.querySelector('.menu-item[data-tool="reconciler"]').click();
-
-        const providerFilterInput = document.getElementById('provider-filter-input');
-        providerFilterInput.addEventListener('input', () => {
-            const filterValue = providerFilterInput.value.toLowerCase();
-            const providerSelect = ui.providerAnalysis.providerSelect;
-            
-            for (const option of providerSelect.options) {
-                if (option.value === "") {
-                    continue;
-                }
-                const optionValue = option.value.toLowerCase();
-                if (optionValue.includes(filterValue)) {
-                    option.style.display = '';
+        const tbody = document.createElement('tbody');
+        data.forEach(rowData => {
+            const tr = document.createElement('tr');
+            Object.keys(rowData).forEach(key => {
+                const td = document.createElement('td');
+                const value = rowData[key];
+                if (typeof value === 'number') {
+                    td.textContent = value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+                    if (key === 'Diferencia') {
+                        td.style.fontWeight = 'bold';
+                        td.style.color = value !== 0 ? 'var(--danger-color)' : 'var(--success-color)';
+                    }
                 } else {
-                    option.style.display = 'none';
+                    td.textContent = value;
                 }
-            }
+                tr.appendChild(td);
+            });
+            const actionTd = document.createElement('td');
+            const detailButton = document.createElement('button');
+            detailButton.className = 'btn-secondary';
+            detailButton.innerHTML = '<i class="fa-solid fa-eye"></i> Ver Detalle';
+            detailButton.style.padding = '5px 10px';
+            detailButton.style.fontSize = '0.8rem';
+            detailButton.dataset.cuit = rowData.CUIT;
+            actionTd.appendChild(detailButton);
+            tr.appendChild(actionTd);
+            tbody.appendChild(tr);
         });
+
+        tableElement.appendChild(thead);
+        tableElement.appendChild(tbody);
+    }
+    
+    function displayDiscrepancyAnalysis() {
+        const threshold = parseFloat(ui.discrepancyAnalysis.thresholdInput.value) || 0;
+        const filteredData = appState.providerDiscrepancies.filter(p => Math.abs(p.Diferencia) >= threshold);
+
+        ui.discrepancyAnalysis.providersFound.textContent = filteredData.length;
+        const totalDifference = filteredData.reduce((sum, p) => sum + p.Diferencia, 0);
+        ui.discrepancyAnalysis.discrepancyTotal.textContent = `${totalDifference.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}`;
+
+        renderDiscrepancyTable(filteredData);
+        ui.discrepancyAnalysis.summary.classList.remove('hidden');
+    }
+
+    // --- INICIALIZACIÓN DE LA APP ---
+    function initialize() {
+        // ... (código existente de inicialización)
         
         // --- EVENT LISTENERS PARA LAS NUEVAS FUNCIONES ---
         ui.reconciler.saveChangesBtn.addEventListener('click', () => saveReconciliation(false));
@@ -875,6 +929,25 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.reconciler.renameReconciliationBtn.addEventListener('click', renameSelectedReconciliation);
         ui.reconciler.deleteReconciliationBtn.addEventListener('click', deleteSelectedReconciliation);
         
+        ui.discrepancyAnalysis.applyFilterBtn.addEventListener('click', displayDiscrepancyAnalysis);
+        ui.discrepancyAnalysis.table.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (button && button.dataset.cuit) {
+                const cuit = button.dataset.cuit;
+                
+                document.querySelector('.menu-item[data-tool="provider-analysis"]').click();
+
+                const providerSelect = ui.providerAnalysis.providerSelect;
+                const providerFilterInput = document.getElementById('provider-filter-input');
+                
+                providerFilterInput.value = cuit;
+                providerFilterInput.dispatchEvent(new Event('input'));
+
+                providerSelect.value = cuit;
+                providerSelect.dispatchEvent(new Event('change'));
+            }
+        });
+
         loadSavedReconciliations();
     }
     
