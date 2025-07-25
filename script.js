@@ -400,15 +400,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayGeneralResults() {
         const { reconciler: recUI } = ui;
         const arcaMontoCol = recUI.selectMontoArca.value;
-        const arcaData = appState.allArcaRecords;
+        const arcaData = appState.allArcaRecords; // <-- CORRECCIÓN: Usar los datos en estado
         const reconciled = arcaData.filter(r => r.Estado === 'Conciliada');
         const pending = arcaData.filter(r => r.Estado === 'Pendiente');
-        const totalArca = arcaData.reduce((sum, r) => sum + (normalizeRecord(r, null, arcaMontoCol).monto || 0), 0);
+        const totalArca = arcaData.reduce((sum, r) => sum + (normalizeRecord(r, null, arcaMontoCol).monto || 0), 0); // <-- CORRECCIÓN
         const totalReconciled = reconciled.reduce((sum, r) => sum + (normalizeRecord(r, null, arcaMontoCol).monto || 0), 0);
         const totalPending = totalArca - totalReconciled;
         const formatCurrency = (num) => num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         recUI.summaryArcaAmount.textContent = `$${formatCurrency(totalArca)}`;
-        recUI.summaryArcaCount.textContent = `${arcaData.length} registros`;
+        recUI.summaryArcaCount.textContent = `${arcaData.length} registros`; // <-- CORRECCIÓN
         recUI.summaryReconciledAmount.textContent = `$${formatCurrency(totalReconciled)}`;
         recUI.summaryReconciledCount.textContent = `${reconciled.length} registros`;
         recUI.summaryPendingAmount.textContent = `$${formatCurrency(totalPending)}`;
@@ -567,6 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         displayProviderDetails();
     }
     
+    // --- LÓGICA DE DESCARGA ---
     function downloadReport(isGeneral = true) {
         if (appState.allArcaRecords.length === 0) {
             showMessage('No hay resultados para descargar.', true);
@@ -728,6 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ui.reconciler.reconciliationNameInput.value = concData.nombre;
             ui.reconciler.reconciliationStatusSelect.value = concData.status;
             
+            // --- CORRECCIÓN: Calcular y guardar la lista de proveedores ---
             const allArcaCuits = appState.allArcaRecords.map(r => normalizeRecord(r, concData.cuit_arca_col, null).cuit);
             const allContabilidadCuits = appState.allContabilidadRecords.map(r => normalizeRecord(r, concData.cuit_cont_col, null).cuit);
             appState.providerCuits = [...new Set([...allArcaCuits, ...allContabilidadCuits])].filter(c => c).sort();
