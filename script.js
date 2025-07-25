@@ -1,7 +1,6 @@
 // Conexión a Supabase con tus claves
 const SUPABASE_URL = 'https://eflaynhqmzxchqhkcnzp.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVmbGF5bmhxbXp4Y2hxaGtjbnpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM0MDQxODQsImV4cCI6MjA2ODk4MDE4NH0.7t0LNLiv5zNB36SIt7sFhv3GftQ2XqD6L_eKK2rr3NI';
-// CORRECCIÓN: Se usa un nombre de variable diferente para el cliente
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -687,6 +686,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     option.style.display = 'none';
                 }
+            }
+        });
+        
+        // LÓGICA DE GUARDADO EN SUPABASE
+        const saveBtn = document.getElementById('save-reconciliation-btn');
+        const reconciliationNameInput = document.getElementById('reconciliation-name');
+
+        saveBtn.addEventListener('click', async () => {
+            console.log("Botón de guardar presionado."); // PUNTO DE CONTROL 1
+
+            const reconciliationName = reconciliationNameInput.value.trim();
+            if (!reconciliationName) {
+                showMessage('Por favor, dale un nombre a la conciliación antes de guardar.', true);
+                return;
+            }
+            console.log("Nombre de conciliación:", reconciliationName); // PUNTO DE CONTROL 2
+
+            if (appState.allArcaRecords.length === 0 && appState.allContabilidadRecords.length === 0) {
+                showMessage('No hay datos procesados para guardar.', true);
+                return;
+            }
+
+            ui.reconciler.loaderOverlay.style.display = 'flex';
+            console.log("Intentando guardar en Supabase..."); // PUNTO DE CONTROL 3
+
+            try {
+                // 1. Crear la entrada principal en la tabla 'conciliaciones'
+                const { data: concData, error: concError } = await supabaseClient
+                    .from('conciliaciones')
+                    .insert([{ nombre: reconciliationName }])
+                    .select()
+                    .single();
+
+                if (concError) throw concError;
+                
+                console.log("Éxito al guardar la conciliación principal. ID:", concData.id); // PUNTO DE CONTROL 4
+                const newConciliationId = concData.id;
+
+                // 2. Preparar todos los registros para la tabla 'registros'
+                const arcaRecordsToSave = appState.allArcaRecords.map(rec => ({
+                    conciliacion_id: newConciliationId,
+                    fuente: 'ARCA',
+                    estado: rec.Estado,
+                    match_id: rec.matchId || null,
+                    datos_originales: rec
+                }));
+
+                const contabilidadRecordsToSave = appState.allContabilidadRecords.map(rec => ({
+                    conciliacion_id: newConciliationId,
+                    fuente: 'Contabilidad',
+                    estado: rec.Estado,
+                    match_id: rec.matchId || null,
+                    datos_originales: rec
+                }));
+
+                const allRecordsToSave = [...arcaRecordsToSave, ...contabilidadRecordsToSave];
+
+                // 3. Insertar todos los registros en la base de datos
+                const { error: regError } = await supabaseClient
+                    .from('registros')
+                    .insert(allRecordsToSave);
+
+                if (regError) throw regError;
+                
+                console.log("Éxito al guardar todos los registros."); // PUNTO DE CONTROL 5
+
+                showMessage('¡Conciliación guardada exitosamente!', false);
+                reconciliationNameInput.value = '';
+
+            } catch (error) {
+                console.error('Error al guardar la conciliación:', error);
+                showMessage(`Error al guardar: ${error.message}`, true);
+            } finally {
+                ui.reconciler.loaderOverlay.style.display = 'none';
             }
         });
     }
