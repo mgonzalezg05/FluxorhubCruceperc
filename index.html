@@ -21,7 +21,7 @@
             <span class="sidebar-title">FluxorHub</span>
         </div>
         <ul class="sidebar-menu">
-            <li class="menu-item" data-tool="reconciler">
+            <li class="menu-item active" data-tool="reconciler">
                 <a><i class="fa-solid fa-balance-scale"></i><span>Conciliador General</span></a>
             </li>
             <li class="menu-item" data-tool="provider-analysis">
@@ -58,12 +58,15 @@
                 <div class="panel-full-width">
                     
                     <div id="load-section" class="card hidden">
-                        <h3><i class="fa-solid fa-folder-open"></i> Cargar Conciliación Guardada</h3>
-                        <div class="load-controls" style="display: flex; gap: 1rem; align-items: center;">
-                            <select id="saved-reconciliations-select" class="select-mapping" style="flex-grow: 1;"></select>
+                        <h3><i class="fa-solid fa-folder-open"></i> Gestionar Conciliaciones Guardadas</h3>
+                        <div class="load-controls" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                            <select id="saved-reconciliations-select" class="select-mapping" style="flex-grow: 1; min-width: 250px;"></select>
                             <button id="load-reconciliation-btn" class="btn-secondary"><i class="fa-solid fa-upload"></i> Cargar</button>
+                            <button id="rename-reconciliation-btn" class="btn-secondary" style="background: var(--subtext-color);"><i class="fa-solid fa-pencil"></i> Renombrar</button>
+                            <button id="delete-reconciliation-btn" class="btn-danger"><i class="fa-solid fa-trash"></i> Eliminar</button>
                         </div>
                     </div>
+
                     <div class="card" style="position: relative;">
                         <div id="loader-overlay" class="loader-overlay" style="display: none;"><div class="spinner"></div></div>
                         <h3><i class="fa-solid fa-balance-scale"></i> Carga de Archivos a Conciliar</h3>
@@ -100,9 +103,15 @@
                         </div>
                         <div class="action-section" style="margin: 2rem 0;"><button id="download-report-btn" class="btn-secondary"><i class="fa-solid fa-file-excel"></i> Descargar Reporte General</button></div>
                         
-                        <div class="save-section" style="border-top: 1px solid var(--border-color); margin-top: 2rem; padding-top: 2rem; display: flex; gap: 1rem; align-items: center; justify-content: center;">
-                            <input type="text" id="reconciliation-name" class="select-mapping" placeholder="Dale un nombre a esta conciliación..." style="max-width: 300px;">
-                            <button id="save-reconciliation-btn" class="btn-primary"><i class="fa-solid fa-save"></i> Guardar Conciliación</button>
+                        <div class="save-section" style="border-top: 1px solid var(--border-color); margin-top: 2rem; padding-top: 2rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: center;">
+                            <input type="text" id="reconciliation-name" class="select-mapping" placeholder="Nombre de la conciliación..." style="flex-grow: 1; min-width: 200px;">
+                            <select id="reconciliation-status" class="select-mapping" style="flex-basis: 150px;">
+                                <option value="Borrador">Borrador</option>
+                                <option value="En Revisión">En Revisión</option>
+                                <option value="Finalizada">Finalizada</option>
+                            </select>
+                            <button id="save-changes-btn" class="btn-primary"><i class="fa-solid fa-save"></i> Guardar Cambios</button>
+                            <button id="save-as-new-btn" class="btn-secondary"><i class="fa-solid fa-copy"></i> Guardar como Nuevo</button>
                         </div>
                         
                         <div class="results-tables">
