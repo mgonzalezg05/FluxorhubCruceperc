@@ -56,6 +56,14 @@
         <main class="dashboard">
             <div id="tool-reconciler" class="tool-content">
                 <div class="panel-full-width">
+                    
+                    <div id="load-section" class="card hidden">
+                        <h3><i class="fa-solid fa-folder-open"></i> Cargar Conciliación Guardada</h3>
+                        <div class="load-controls" style="display: flex; gap: 1rem; align-items: center;">
+                            <select id="saved-reconciliations-select" class="select-mapping" style="flex-grow: 1;"></select>
+                            <button id="load-reconciliation-btn" class="btn-secondary"><i class="fa-solid fa-upload"></i> Cargar</button>
+                        </div>
+                    </div>
                     <div class="card" style="position: relative;">
                         <div id="loader-overlay" class="loader-overlay" style="display: none;"><div class="spinner"></div></div>
                         <h3><i class="fa-solid fa-balance-scale"></i> Carga de Archivos a Conciliar</h3>
@@ -91,7 +99,7 @@
                            <div class="summary-card danger"><h4>Pendiente</h4><p id="summary-pending-amount">$0.00</p><span id="summary-pending-count">0 registros</span></div>
                         </div>
                         <div class="action-section" style="margin: 2rem 0;"><button id="download-report-btn" class="btn-secondary"><i class="fa-solid fa-file-excel"></i> Descargar Reporte General</button></div>
-
+                        
                         <div class="save-section" style="border-top: 1px solid var(--border-color); margin-top: 2rem; padding-top: 2rem; display: flex; gap: 1rem; align-items: center; justify-content: center;">
                             <input type="text" id="reconciliation-name" class="select-mapping" placeholder="Dale un nombre a esta conciliación..." style="max-width: 300px;">
                             <button id="save-reconciliation-btn" class="btn-primary"><i class="fa-solid fa-save"></i> Guardar Conciliación</button>
@@ -188,8 +196,6 @@
 </div>
 
 <style id="column-styles"></style>
-
 <script src="script.js"></script>
-
 </body>
 </html>
