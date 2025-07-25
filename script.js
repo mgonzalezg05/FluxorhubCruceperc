@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- ESTADO GLOBAL DE LA APLICACIÓN ---
     let messageTimeout;
     const appState = {
+        currentReconciliationId: null, // Guarda el ID de la sesión cargada
         fileArca: null, fileContabilidad: null,
         dataArca: null, dataContabilidad: null,
         allArcaRecords: [], allContabilidadRecords: [],
@@ -21,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ELEMENTOS DE LA UI (Interfaz de Usuario) ---
     const ui = {
-        // ... (el objeto ui no cambia, solo se añaden los nuevos elementos)
         themeToggle: document.getElementById("themeToggle"),
         menuItems: document.querySelectorAll('.sidebar-menu .menu-item'),
         toolContents: document.querySelectorAll('.tool-content'),
@@ -65,6 +65,12 @@ document.addEventListener('DOMContentLoaded', () => {
             loadSection: document.getElementById('load-section'),
             savedReconciliationsSelect: document.getElementById('saved-reconciliations-select'),
             loadReconciliationBtn: document.getElementById('load-reconciliation-btn'),
+            renameReconciliationBtn: document.getElementById('rename-reconciliation-btn'),
+            deleteReconciliationBtn: document.getElementById('delete-reconciliation-btn'),
+            reconciliationNameInput: document.getElementById('reconciliation-name'),
+            reconciliationStatusSelect: document.getElementById('reconciliation-status'),
+            saveChangesBtn: document.getElementById('save-changes-btn'),
+            saveAsNewBtn: document.getElementById('save-as-new-btn'),
         },
         providerAnalysis: {
             placeholder: document.getElementById('provider-analysis-placeholder'),
@@ -81,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
     
-    // --- LÓGICA DE CONFIGURACIÓN DE COLUMNAS (sin cambios) ---
+    // --- LÓGICA DE CONFIGURACIÓN DE COLUMNAS ---
     function applyColumnVisibilityStyles() {
         let styles = '';
         for (const tableId in appState.columnVisibility) {
@@ -136,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- FUNCIONES AUXILIARES GLOBALES (showMessage mejorado) ---
+    // --- FUNCIONES AUXILIARES GLOBALES ---
     const showMessage = (message, isError = false) => {
         const msgBox = ui.reconciler.messageBox;
         clearTimeout(messageTimeout);
@@ -164,7 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return { cuit, monto: isNaN(monto) ? 0 : monto, original: record };
     };
     
-    // --- RENDERIZADO DE TABLAS (sin cambios) ---
     const renderTable = (jsonData, tableElement, { maxRows = -1, showCheckboxes = false, recordSource = '' }) => {
         tableElement.innerHTML = '';
         if (!jsonData || jsonData.length === 0) {
@@ -238,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applyColumnVisibilityStyles();
     };
     
-    // --- LÓGICA DE NAVEGACIÓN Y VISUALIZACIÓN (sin cambios) ---
+    // --- LÓGICA DE NAVEGACIÓN Y VISUALIZACIÓN ---
     function setupNavigation() {
         ui.menuItems.forEach(item => {
             item.addEventListener('click', (e) => {
@@ -264,9 +269,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- LÓGICA DEL CONCILIADOR (sin cambios) ---
+    // --- LÓGICA DEL CONCILIADOR ---
     async function handleFileSelect(file, type) {
         if (!file) return;
+        appState.currentReconciliationId = null; 
+        ui.reconciler.reconciliationNameInput.value = '';
+        ui.reconciler.reconciliationStatusSelect.value = 'Borrador';
+
         appState[`file${type}`] = file;
         const fileNameEl = ui.reconciler[`fileName${type}`];
         fileNameEl.innerHTML = `<span class="file-loaded">${file.name}</span>`;
@@ -327,6 +336,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     async function processReconciliation() {
+        appState.currentReconciliationId = null;
+        ui.reconciler.reconciliationNameInput.value = '';
+        ui.reconciler.reconciliationStatusSelect.value = 'Borrador';
+
         const { reconciler: recUI } = ui;
         const cuitArcaCol = recUI.selectCuitArca.value, montoArcaCol = recUI.selectMontoArca.value;
         const cuitContCol = recUI.selectCuitContabilidad.value, montoContCol = recUI.selectMontoContabilidad.value;
@@ -404,8 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
         recUI.resultsSection.classList.remove('hidden');
     }
 
-    // --- ANÁLISIS POR PROVEEDOR Y CONCILIACIÓN MANUAL (sin cambios) ---
-    // ... (Todas las funciones desde populateProviderSelector hasta downloadProviderReport se mantienen igual)
+    // --- LÓGICA DE ANÁLISIS POR PROVEEDOR Y CONCILIACIÓN MANUAL ---
     function populateProviderSelector() {
         const { providerAnalysis: provUI } = ui;
         provUI.providerSelect.innerHTML = '<option value="">Seleccione un CUIT para ver el detalle...</option>';
@@ -613,18 +625,67 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // --- LÓGICA DE CARGA Y GUARDADO ---
-    async function loadSavedReconciliations() {
-        const { data, error } = await supabaseClient
-            .from('conciliaciones')
-            .select('id, nombre, created_at')
-            .order('created_at', { ascending: false });
+    // --- NUEVAS FUNCIONES DE GESTIÓN DE DATOS ---
 
-        if (error) {
-            console.error('Error al cargar la lista de conciliaciones:', error);
+    async function saveReconciliation(isNew = false) {
+        const { reconciler: recUI } = ui;
+        const reconciliationName = recUI.reconciliationNameInput.value.trim();
+        if (!reconciliationName) {
+            showMessage('Por favor, dale un nombre a la conciliación.', true);
             return;
         }
 
+        const isUpdate = appState.currentReconciliationId !== null && !isNew;
+        
+        recUI.loaderOverlay.style.display = 'flex';
+        try {
+            const conciliationData = {
+                nombre: reconciliationName,
+                status: recUI.reconciliationStatusSelect.value,
+                cuit_arca_col: recUI.selectCuitArca.value,
+                monto_arca_col: recUI.selectMontoArca.value,
+                cuit_cont_col: recUI.selectCuitContabilidad.value,
+                monto_cont_col: recUI.selectMontoContabilidad.value
+            };
+
+            let reconciliationId = appState.currentReconciliationId;
+
+            if (isUpdate) {
+                const { error } = await supabaseClient.from('conciliaciones').update(conciliationData).eq('id', reconciliationId);
+                if (error) throw error;
+                const { error: deleteError } = await supabaseClient.from('registros').delete().eq('conciliacion_id', reconciliationId);
+                if (deleteError) throw deleteError;
+            } else {
+                const { data, error } = await supabaseClient.from('conciliaciones').insert([conciliationData]).select().single();
+                if (error) throw error;
+                reconciliationId = data.id;
+                appState.currentReconciliationId = reconciliationId; 
+            }
+            
+            const arcaRecordsToSave = appState.allArcaRecords.map(rec => ({ conciliacion_id: reconciliationId, fuente: 'ARCA', estado: rec.Estado, match_id: rec.matchId || null, datos_originales: rec }));
+            const contabilidadRecordsToSave = appState.allContabilidadRecords.map(rec => ({ conciliacion_id: reconciliationId, fuente: 'Contabilidad', estado: rec.Estado, match_id: rec.matchId || null, datos_originales: rec }));
+            const allRecordsToSave = [...arcaRecordsToSave, ...contabilidadRecordsToSave];
+
+            const { error: regError } = await supabaseClient.from('registros').insert(allRecordsToSave);
+            if (regError) throw regError;
+
+            showMessage('¡Conciliación guardada exitosamente!', false);
+            loadSavedReconciliations();
+
+        } catch (error) {
+            console.error('Error al guardar:', error);
+            showMessage(`Error al guardar: ${error.message}`, true);
+        } finally {
+            recUI.loaderOverlay.style.display = 'none';
+        }
+    }
+
+    async function loadSavedReconciliations() {
+        const { data, error } = await supabaseClient.from('conciliaciones').select('id, nombre, created_at, status').order('created_at', { ascending: false });
+        if (error) {
+            console.error('Error al cargar lista:', error);
+            return;
+        }
         if (data && data.length > 0) {
             ui.reconciler.loadSection.classList.remove('hidden');
             const select = ui.reconciler.savedReconciliationsSelect;
@@ -632,8 +693,8 @@ document.addEventListener('DOMContentLoaded', () => {
             data.forEach(rec => {
                 const option = document.createElement('option');
                 option.value = rec.id;
-                const date = new Date(rec.created_at).toLocaleString('es-AR');
-                option.textContent = `${rec.nombre} (${date})`;
+                const date = new Date(rec.created_at).toLocaleDateString('es-AR');
+                option.textContent = `[${rec.status}] ${rec.nombre} (${date})`;
                 select.appendChild(option);
             });
         }
@@ -645,53 +706,76 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ui.reconciler.loaderOverlay.style.display = 'flex';
         try {
-            // Cargar la data principal de la conciliación
-            const { data: concData, error: concError } = await supabaseClient
-                .from('conciliaciones')
-                .select('*')
-                .eq('id', selectedId)
-                .single();
+            const { data: concData, error: concError } = await supabaseClient.from('conciliaciones').select('*').eq('id', selectedId).single();
             if (concError) throw concError;
             
-            // Cargar todos los registros asociados
-            const { data: regData, error: regError } = await supabaseClient
-                .from('registros')
-                .select('*')
-                .eq('conciliacion_id', selectedId);
+            const { data: regData, error: regError } = await supabaseClient.from('registros').select('*').eq('conciliacion_id', selectedId);
             if (regError) throw regError;
 
-            // Restaurar el estado de la aplicación
+            appState.currentReconciliationId = selectedId;
             appState.allArcaRecords = regData.filter(r => r.fuente === 'ARCA').map(r => r.datos_originales);
             appState.allContabilidadRecords = regData.filter(r => r.fuente === 'Contabilidad').map(r => r.datos_originales);
             
-            // Simular carga de archivos para popular selectores de columnas
             const arcaHeaders = appState.allArcaRecords.length > 0 ? Object.keys(appState.allArcaRecords[0]) : [];
             const contHeaders = appState.allContabilidadRecords.length > 0 ? Object.keys(appState.allContabilidadRecords[0]) : [];
             populateColumnSelectors('Arca', arcaHeaders);
             populateColumnSelectors('Contabilidad', contHeaders);
 
-            // Asignar las columnas guardadas
             ui.reconciler.selectCuitArca.value = concData.cuit_arca_col;
             ui.reconciler.selectMontoArca.value = concData.monto_arca_col;
             ui.reconciler.selectCuitContabilidad.value = concData.cuit_cont_col;
             ui.reconciler.selectMontoContabilidad.value = concData.monto_cont_col;
+            ui.reconciler.reconciliationNameInput.value = concData.nombre;
+            ui.reconciler.reconciliationStatusSelect.value = concData.status;
             
-            // Recalcular CUITs de proveedores
             const allArcaCuits = appState.allArcaRecords.map(r => normalizeRecord(r, concData.cuit_arca_col, null).cuit);
             const allContabilidadCuits = appState.allContabilidadRecords.map(r => normalizeRecord(r, concData.cuit_cont_col, null).cuit);
             appState.providerCuits = [...new Set([...allArcaCuits, ...allContabilidadCuits])].filter(c => c).sort();
 
-            // Refrescar la UI
             displayGeneralResults();
             updateToolAvailability();
             showMessage(`Conciliación "${concData.nombre}" cargada.`, false);
             ui.reconciler.columnMappingSection.classList.remove('hidden');
 
         } catch (error) {
-            console.error('Error al cargar la conciliación:', error);
+            console.error('Error al cargar:', error);
             showMessage(`Error al cargar: ${error.message}`, true);
         } finally {
             ui.reconciler.loaderOverlay.style.display = 'none';
+        }
+    }
+
+    async function renameSelectedReconciliation() {
+        const selectedId = ui.reconciler.savedReconciliationsSelect.value;
+        if (!selectedId) { showMessage('Primero selecciona una conciliación para renombrar.', true); return; }
+
+        const currentName = ui.reconciler.savedReconciliationsSelect.options[ui.reconciler.savedReconciliationsSelect.selectedIndex].text.split('(')[0].replace(/\[.*?\]\s*/, '').trim();
+        const newName = prompt('Ingresa el nuevo nombre para la conciliación:', currentName);
+
+        if (newName && newName.trim() !== '') {
+            const { error } = await supabaseClient.from('conciliaciones').update({ nombre: newName.trim() }).eq('id', selectedId);
+            if (error) {
+                showMessage(`Error al renombrar: ${error.message}`, true);
+            } else {
+                showMessage('Renombrada con éxito.', false);
+                loadSavedReconciliations();
+            }
+        }
+    }
+
+    async function deleteSelectedReconciliation() {
+        const selectedId = ui.reconciler.savedReconciliationsSelect.value;
+        if (!selectedId) { showMessage('Primero selecciona una conciliación para eliminar.', true); return; }
+
+        const selectedText = ui.reconciler.savedReconciliationsSelect.options[ui.reconciler.savedReconciliationsSelect.selectedIndex].text;
+        if (confirm(`¿Estás seguro de que quieres eliminar "${selectedText}"?\n\nEsta acción no se puede deshacer.`)) {
+            const { error } = await supabaseClient.from('conciliaciones').delete().eq('id', selectedId);
+            if (error) {
+                showMessage(`Error al eliminar: ${error.message}`, true);
+            } else {
+                showMessage('Eliminada con éxito.', false);
+                loadSavedReconciliations();
+            }
         }
     }
     
@@ -782,89 +866,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        // LÓGICA DE GUARDADO EN SUPABASE (con mapeo de columnas)
-        const saveBtn = document.getElementById('save-reconciliation-btn');
-        const reconciliationNameInput = document.getElementById('reconciliation-name');
-
-        saveBtn.addEventListener('click', async () => {
-            console.log("Botón de guardar presionado.");
-            const reconciliationName = reconciliationNameInput.value.trim();
-            if (!reconciliationName) {
-                showMessage('Por favor, dale un nombre a la conciliación antes de guardar.', true);
-                return;
-            }
-            console.log("Nombre de conciliación:", reconciliationName);
-
-            if (appState.allArcaRecords.length === 0 && appState.allContabilidadRecords.length === 0) {
-                showMessage('No hay datos procesados para guardar.', true);
-                return;
-            }
-
-            ui.reconciler.loaderOverlay.style.display = 'flex';
-            console.log("Intentando guardar en Supabase...");
-
-            try {
-                const { reconciler: recUI } = ui;
-                const conciliationToSave = {
-                    nombre: reconciliationName,
-                    cuit_arca_col: recUI.selectCuitArca.value,
-                    monto_arca_col: recUI.selectMontoArca.value,
-                    cuit_cont_col: recUI.selectCuitContabilidad.value,
-                    monto_cont_col: recUI.selectMontoContabilidad.value
-                };
-
-                const { data: concData, error: concError } = await supabaseClient
-                    .from('conciliaciones')
-                    .insert([conciliationToSave])
-                    .select()
-                    .single();
-
-                if (concError) throw concError;
-                
-                console.log("Éxito al guardar la conciliación principal. ID:", concData.id);
-                const newConciliationId = concData.id;
-
-                const arcaRecordsToSave = appState.allArcaRecords.map(rec => ({
-                    conciliacion_id: newConciliationId,
-                    fuente: 'ARCA',
-                    estado: rec.Estado,
-                    match_id: rec.matchId || null,
-                    datos_originales: rec
-                }));
-
-                const contabilidadRecordsToSave = appState.allContabilidadRecords.map(rec => ({
-                    conciliacion_id: newConciliationId,
-                    fuente: 'Contabilidad',
-                    estado: rec.Estado,
-                    match_id: rec.matchId || null,
-                    datos_originales: rec
-                }));
-
-                const allRecordsToSave = [...arcaRecordsToSave, ...contabilidadRecordsToSave];
-
-                const { error: regError } = await supabaseClient
-                    .from('registros')
-                    .insert(allRecordsToSave);
-
-                if (regError) throw regError;
-                
-                console.log("Éxito al guardar todos los registros.");
-
-                showMessage('¡Conciliación guardada exitosamente!', false);
-                reconciliationNameInput.value = '';
-                loadSavedReconciliations(); // Recargar la lista para que aparezca la nueva
-
-            } catch (error) {
-                console.error('Error al guardar la conciliación:', error);
-                showMessage(`Error al guardar: ${error.message}`, true);
-            } finally {
-                ui.reconciler.loaderOverlay.style.display = 'none';
-            }
-        });
-        
-        // Cargar la lista de conciliaciones al iniciar la app
-        loadSavedReconciliations();
+        // --- EVENT LISTENERS PARA LAS NUEVAS FUNCIONES ---
+        ui.reconciler.saveChangesBtn.addEventListener('click', () => saveReconciliation(false));
+        ui.reconciler.saveAsNewBtn.addEventListener('click', () => saveReconciliation(true));
         ui.reconciler.loadReconciliationBtn.addEventListener('click', loadSelectedReconciliation);
+        ui.reconciler.renameReconciliationBtn.addEventListener('click', renameSelectedReconciliation);
+        ui.reconciler.deleteReconciliationBtn.addEventListener('click', deleteSelectedReconciliation);
+        
+        loadSavedReconciliations();
     }
     
     initialize();
