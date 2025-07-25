@@ -7,7 +7,6 @@
 
 </head>
 <body>
-<!-- partial:index.partial.html -->
 <!DOCTYPE html>
 <html lang="en" >
 <head>
@@ -30,6 +29,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -109,6 +109,12 @@
                            <div class="summary-card danger"><h4>Pendiente</h4><p id="summary-pending-amount">$0.00</p><span id="summary-pending-count">0 registros</span></div>
                         </div>
                         <div class="action-section" style="margin: 2rem 0;"><button id="download-report-btn" class="btn-secondary"><i class="fa-solid fa-file-excel"></i> Descargar Reporte General</button></div>
+
+                        <div class="save-section" style="border-top: 1px solid var(--border-color); margin-top: 2rem; padding-top: 2rem; display: flex; gap: 1rem; align-items: center; justify-content: center;">
+                            <input type="text" id="reconciliation-name" class="select-mapping" placeholder="Dale un nombre a esta conciliación..." style="max-width: 300px;">
+                            <button id="save-reconciliation-btn" class="btn-primary"><i class="fa-solid fa-save"></i> Guardar Conciliación</button>
+                        </div>
+                        
                         <div class="results-tables">
                             <div class="table-header">
                                 <h4><i class="fa-solid fa-triangle-exclamation" style="color: var(--danger-color);"></i> Vista Previa de Percepciones Pendientes</h4>
@@ -207,8 +213,7 @@
 
 </body>
 </html>
-<!-- partial -->
-  <script  src="./script.js"></script>
+<script  src="./script.js"></script>
 
 </body>
 </html>
